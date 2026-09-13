@@ -64,6 +64,5 @@ jobs:
       - name: Install development dependencies
         run: python -m pip install -e ".[dev]"
       - run: python -m pip check
-      # init에는 기능 테스트가 없다. 기능 PR에서 이 단계를 pytest로 변경한다.
-      - name: Smoke test package
-        run: python -c "import ai_companion"
+      - name: Run offline tests
+        run: python -m pytest -q
