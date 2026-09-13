@@ -1,0 +1,22 @@
+# ai-companion rules
+
+- This folder is a Python code project by the user's request. Keep planning and research in docs/.
+- Read README.md and relevant docs before editing.
+- Write user replies and documentation in Korean. Write AGENTS.md in simple English.
+- Keep task status and dates only in docs/프로젝트.md.
+- Keep domain and application code free of Discord, HTTP, and model SDK imports.
+- Use typed dataclasses for shared messages and Protocol interfaces for external boundaries.
+- Prefer composition and constructor injection over deep inheritance.
+- Put provider-specific parsing, authentication, and transport errors in adapters.
+- Start with discord.py and LM Studio. Do not add providers or frameworks without a concrete need.
+- Never log credentials, full prompts, private messages, or provider error bodies.
+- Keep .env, runtime data, logs, and virtual environments out of version control.
+- Do not send live Discord messages as part of automated tests. Use fake adapters.
+- Run pytest, ruff check, ruff format --check, and mypy after code changes.
+- Distinguish offline tests from actual Discord and model connection checks.
+- Keep relative Markdown links working when moving documents.
+- If committing, write a detailed Korean commit message explaining changes and reasons.
+- Prefix commit titles with init:, feat:, fix:, docs:, or chore: as appropriate.
+- Keep main as the reviewed baseline. Put implementation on feature branches and merge only after user review.
+- Keep backup/initial-implementation-e625daf unchanged as the original implementation snapshot.
+- CI must use fake adapters and no live credentials. Review automation is advisory and must not auto-merge.

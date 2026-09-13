@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: ko-KR
+tone_instructions: "실제 동작 오류와 유지보수 위험을 근거로 설명하세요. 스타일은 Ruff에 맡기고 한국어로 간결하게 리뷰하세요."
+reviews:
+  profile: chill
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  auto_review:
+    enabled: true
+    drafts: false
+  path_instructions:
+    - path: "src/ai_companion/domain.py"
+      instructions: "외부 SDK에 독립적인 dataclass와 플랫폼·사용자·대화 식별자 분리를 확인하세요."
+    - path: "src/ai_companion/application/**"
+      instructions: "코어의 Discord·HTTP SDK 의존, 취소 전파, 중복 송신, 전송되지 않은 응답의 이력 혼입, 사용자 데이터 격리를 확인하세요."
+    - path: "src/ai_companion/adapters/**"
+      instructions: "공통 포트 계약, timeout·취소·인증·요청 제한 오류, 자원 정리, 선택 기능의 실패가 대화를 막는지, 비밀키·개인 대화 로그 노출을 확인하세요."
+    - path: "tests/**"
+      instructions: "실제 Discord·외부 모델 연결과 비밀키를 요구하지 않는지 확인하고, 동작·실패·동시성에 대한 유효한 검증 누락에 집중하세요."
+    - path: "docs/**"
+      instructions: "설계 제안, 백업의 과거 검증, 현재 브랜치의 구현 상태를 구분하고 상태·기한 원본은 docs/프로젝트.md 한 곳으로 유지하는지 확인하세요."
+    - path: ".github/workflows/**"
+      instructions: "최소 토큰 권한, 비밀 없는 PR 테스트, 플랫폼별 실행 명령, 실패가 성공으로 감춰지는지 확인하세요."
