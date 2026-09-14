@@ -27,6 +27,8 @@ Copy-Item .env.example .env
 3. 인증을 켰다면 `LMSTUDIO_API_KEY`에 해당 서버의 토큰을 입력한다. 인증을 끈 로컬 서버에서는 빈 값으로 둔다.
 4. 모델 목록을 조회한다. Discord 설정과 모델 ID 없이 실행할 수 있다.
 
+HTTP 연결은 `localhost`, IPv4 loopback(`127.0.0.0/8`), IPv6 loopback(`::1`)에서만 허용한다. LAN 주소를 포함한 다른 호스트는 HTTPS가 필요하다. 모델 서버를 다른 기기에 둘 경우 HTTPS 엔드포인트를 준비하고 그 주소를 설정한다.
+
 ```powershell
 .venv\Scripts\python.exe -m ai_companion check-model
 ```

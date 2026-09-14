@@ -1,6 +1,7 @@
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from ipaddress import ip_address
 from urllib.parse import urlsplit
 
 
@@ -13,6 +14,15 @@ def _required(env: Mapping[str, str], key: str) -> str:
     if not value:
         raise ConfigurationError(f"{key} 설정이 필요합니다.")
     return value
+
+
+def _is_loopback_host(host: str | None) -> bool:
+    if host == "localhost":
+        return True
+    try:
+        return ip_address(host or "").is_loopback
+    except ValueError:
+        return False
 
 
 def _integer(env: Mapping[str, str], key: str, default: str, low: int, high: int) -> int:
@@ -52,7 +62,10 @@ class ModelSettings:
         try:
             parts = urlsplit(base_url)
             valid = (
-                parts.scheme in {"http", "https"}
+                (
+                    parts.scheme == "https"
+                    or (parts.scheme == "http" and _is_loopback_host(parts.hostname))
+                )
                 and parts.hostname
                 and not parts.username
                 and not parts.password
@@ -64,7 +77,11 @@ class ModelSettings:
         except ValueError:
             valid = False
         if not valid:
-            raise ConfigurationError("LMSTUDIO_BASE_URL은 /v1로 끝나는 HTTP(S) 주소여야 합니다.")
+            raise ConfigurationError(
+                "LMSTUDIO_BASE_URL은 /v1로 끝나는 HTTP(S) 주소여야 합니다. "
+                "HTTP는 localhost 또는 loopback IP에서만 허용하며, "
+                "다른 호스트는 HTTPS가 필요합니다."
+            )
         model = (
             _required(env, "LMSTUDIO_MODEL")
             if require_model
