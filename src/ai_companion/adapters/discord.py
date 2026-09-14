@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -113,11 +114,23 @@ class DiscordMessenger(discord.Client):
     @asynccontextmanager
     async def typing(self, address: ConversationAddress) -> AsyncIterator[None]:
         channel = await self._dm_channel(address)
+        context = channel.typing()
         try:
-            async with channel.typing():
-                yield
+            await context.__aenter__()
         except discord.HTTPException:
-            raise DeliveryError("Discord 타이핑 표시 실패") from None
+            logger.warning("discord_typing_failed stage=enter")
+            entered = False
+        else:
+            entered = True
+        try:
+            # 표시 실패와 무관하게 본문을 실행하고, 본문의 예외·취소는 전파한다.
+            yield
+        finally:
+            if entered:
+                try:
+                    await context.__aexit__(*sys.exc_info())
+                except discord.HTTPException:
+                    logger.warning("discord_typing_failed stage=exit")
 
     async def close(self) -> None:
         if self._worker is not None:
