@@ -13,6 +13,7 @@
 - Keep .env, runtime data, logs, and virtual environments out of version control.
 - Do not send live Discord messages as part of automated tests. Use fake adapters.
 - Run pytest, ruff check, ruff format --check, and mypy after code changes.
+- Test observable contracts and regressions. Do not freeze temporary limits, worker counts, private state, or internal module names without a required contract.
 - Distinguish offline tests from actual Discord and model connection checks.
 - Keep relative Markdown links working when moving documents.
 - If committing, write a detailed Korean commit message explaining changes and reasons.

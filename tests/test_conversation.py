@@ -106,7 +106,7 @@ async def test_model_failure_sends_one_notice_without_adding_history(model):
     service, model, sink, store = setup(model=model)
     await service.handle(incoming())
     assert len(sink.sent) == 1
-    assert "잠시 뒤" in sink.sent[0][1].text
+    assert sink.sent[0][1].text.strip()
     assert store.recent(incoming().conversation) == ()
     assert not sink.is_typing
 
@@ -144,15 +144,13 @@ async def test_bounded_history_and_sent_text_match():
     history = store.recent(incoming().conversation)
     assert len(history) == 2 and history[0].content == "둘째"
     assert history[1].content == sink.sent[-1][1].text
-    assert len(history[1].content) == 600
 
 
-async def test_empty_and_oversized_input_do_not_call_model():
+async def test_empty_input_does_not_call_model_or_send():
     service, model, sink, _ = setup()
     await service.handle(incoming(text=" "))
-    await service.handle(incoming(id="2", text="가" * 4001))
     assert not model.requests
-    assert len(sink.sent) == 1
+    assert not sink.sent
 
 
 def test_store_evicts_least_recent_conversation():

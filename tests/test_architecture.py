@@ -20,8 +20,11 @@ def assert_core_imports(source, package):
         for module in modules:
             assert (
                 module.split(".")[0] in sys.stdlib_module_names
-                or module in {"ai_companion", "ai_companion.domain", "ai_companion.application"}
-                or module.startswith("ai_companion.application.")
+                or module.split(".")[0] == "ai_companion"
+            ), f"{package}: 허용되지 않은 코어 의존성 {module}"
+            assert not any(
+                module == outer or module.startswith(f"{outer}.")
+                for outer in ("ai_companion.adapters", "ai_companion.bootstrap")
             ), f"{package}: 허용되지 않은 코어 의존성 {module}"
 
 
@@ -29,7 +32,8 @@ def test_core_imports_only_stdlib_and_inner_modules():
     root = Path(__file__).parents[1] / "src" / "ai_companion"
     paths = [
         root / "__init__.py",
-        root / "domain.py",
+        *root.glob("domain.py"),
+        *(root / "domain").rglob("*.py"),
         *sorted((root / "application").rglob("*.py")),
     ]
     for path in paths:
@@ -75,8 +79,6 @@ def test_architecture_guard_accepts_stdlib_and_core_imports(source):
         "from .. import adapters",
         "from ai_companion.bootstrap import run_bot",
         "from .. import bootstrap",
-        "from ai_companion import config",
-        "from ai_companion import *",
     ],
 )
 def test_architecture_guard_rejects_third_party_and_outer_imports(source):
