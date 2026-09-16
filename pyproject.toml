@@ -17,6 +17,9 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=8,<10", "pytest-asyncio>=1,<2", "ruff>=0.11,<1", "mypy>=1.15,<2"]
 
+[project.scripts]
+ai-companion = "ai_companion.__main__:main"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/ai_companion"]
 
