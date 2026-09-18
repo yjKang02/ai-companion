@@ -47,7 +47,8 @@ class RoomService:
     async def create(self, name: str, context: RoomContext, model: ModelSelection) -> Room:
         if not name.strip() or not context.character.strip() or not model.model_id.strip():
             raise ValueError("방 이름·캐릭터·모델 ID가 필요합니다.")
-        await self._connection(model)
+        model.validate_options()
+        self._executor.validate(await self._connection(model), model)
         room = Room(str(uuid4()), name.strip(), context, model)
         await self._rooms.create(room)
         return room
@@ -63,7 +64,8 @@ class RoomService:
     ) -> Room:
         if not name.strip() or not context.character.strip() or not model.model_id.strip():
             raise ValueError("방 이름·캐릭터·모델 ID가 필요합니다.")
-        await self._connection(model)
+        model.validate_options()
+        self._executor.validate(await self._connection(model), model)
         room = Room(room_id, name.strip(), context, model, expected_revision + 1)
         await self._rooms.update(room, expected_revision)
         return room

@@ -45,6 +45,10 @@ class SecretProvider(Protocol):
 
 
 class ModelExecutor(Protocol):
+    def validate(self, connection: ModelConnection, selection: ModelSelection) -> None:
+        """지원 연결·주소·옵션을 검증한다. 비밀 조회나 네트워크 I/O를 하지 않는다."""
+        ...
+
     async def generate(
         self, connection: ModelConnection, selection: ModelSelection, request: ChatRequest
     ) -> ChatResult: ...

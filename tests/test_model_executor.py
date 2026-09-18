@@ -5,9 +5,18 @@ import httpx
 import pytest
 
 from ai_companion.adapters.model_executor import LMStudioExecutor
+from ai_companion.adapters.room_memory import InMemoryModelConnections, InMemoryRoomStore
 from ai_companion.application.room_ports import ConnectionUnavailable
+from ai_companion.application.rooms import RoomService
 from ai_companion.config import ConfigurationError
-from ai_companion.domain import ChatMessage, ChatRequest, ModelConnection, ModelSelection, Role
+from ai_companion.domain import (
+    ChatMessage,
+    ChatRequest,
+    ModelConnection,
+    ModelSelection,
+    Role,
+    RoomContext,
+)
 
 
 class Secrets:
@@ -67,4 +76,109 @@ async def test_invalid_connections_and_settings_never_send_or_resolve_secret(cha
     async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
         with pytest.raises((ConnectionUnavailable, ConfigurationError)):
             await LMStudioExecutor(client, secrets).generate(connection, selection, ChatRequest(()))
+    assert secrets.requested == []
+
+
+class RecordingStore(InMemoryRoomStore):
+    def __init__(self):
+        super().__init__()
+        self.writes = []
+
+    async def create(self, room):
+        self.writes.append("create")
+        await super().create(room)
+
+    async def update(self, room, expected_revision):
+        self.writes.append("update")
+        await super().update(room, expected_revision)
+
+
+@pytest.mark.parametrize("operation", ["create", "update"])
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("timeout", 0),
+        ("timeout", 601),
+        ("timeout", True),
+        ("timeout", float("inf")),
+        ("timeout", float("-inf")),
+        ("timeout", float("nan")),
+        ("timeout", "60"),
+        ("max_tokens", 0),
+        ("max_tokens", 8193),
+        ("max_tokens", 1.5),
+        ("max_tokens", 1.0),
+        ("max_tokens", True),
+        ("max_tokens", "32"),
+        ("temperature", -0.1),
+        ("temperature", 3),
+        ("temperature", True),
+        ("temperature", float("nan")),
+        ("temperature", float("inf")),
+        ("temperature", "0.7"),
+        ("provider", "unsupported"),
+        ("base_url", "http://remote.invalid/v1"),
+    ],
+)
+async def test_room_rejects_invalid_settings_before_saving(operation, field, value):
+    def handle(request):
+        pytest.fail("설정 저장 중 HTTP 요청이 발생했습니다.")
+
+    store = RecordingStore()
+    connections = InMemoryModelConnections()
+    connection = ModelConnection("local", "lmstudio", "http://localhost:1234/v1", "key-ref")
+    connections.register(connection)
+    secrets = Secrets()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+        service = RoomService(store, connections, LMStudioExecutor(client, secrets))
+        room = await service.create(
+            "기존 방", RoomContext("기존 캐릭터"), ModelSelection("local", "a")
+        )
+        model = room.model
+        if field in ("provider", "base_url"):
+            connections.update(replace(connection, **{field: value}, revision=2), 1)
+        else:
+            model = replace(model, **{field: value})
+        with pytest.raises((ValueError, ConfigurationError, ConnectionUnavailable)):
+            if operation == "create":
+                await service.create("새 방", RoomContext("새 캐릭터"), model)
+            else:
+                await service.update(
+                    room.id,
+                    room.revision,
+                    name="새 이름",
+                    context=RoomContext("새 캐릭터"),
+                    model=model,
+                )
+        assert store.writes == ["create"]
+        assert await store.get(room.id) == room
+        assert await store.history(room.id) == ()
+    assert secrets.requested == []
+
+
+@pytest.mark.parametrize(
+    "selection",
+    [
+        ModelSelection("local", "a", temperature=0, max_tokens=1, timeout=1),
+        ModelSelection("local", "a", temperature=2, max_tokens=8192, timeout=600),
+    ],
+)
+async def test_valid_boundary_settings_can_be_saved_without_model_or_secret_access(selection):
+    def handle(request):
+        pytest.fail("설정 검증은 모델에 연결하지 않습니다.")
+
+    store = InMemoryRoomStore()
+    connections = InMemoryModelConnections()
+    connections.register(
+        ModelConnection("local", "lmstudio", "http://localhost:1234/v1", "key-ref")
+    )
+    secrets = Secrets()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+        service = RoomService(store, connections, LMStudioExecutor(client, secrets))
+        room = await service.create("방", RoomContext("캐릭터"), selection)
+        edited = await service.update(
+            room.id, room.revision, name="편집", context=room.context, model=selection
+        )
+        assert edited.revision == room.revision + 1
+        assert await store.get(room.id) == edited
     assert secrets.requested == []

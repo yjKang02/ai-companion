@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass, field
 from enum import StrEnum
+from math import isfinite
 
 
 class Role(StrEnum):
@@ -95,6 +96,16 @@ class ModelSelection:
     temperature: float = 0.7
     max_tokens: int = 256
     timeout: float = 60
+
+    def validate_options(self) -> None:
+        """공급자 범위와 별개로 숫자 타입과 유한성을 검증한다. bool은 숫자가 아니다."""
+        if type(self.max_tokens) is not int:
+            raise ValueError("max_tokens는 정수여야 합니다.")
+        for name, value in (("temperature", self.temperature), ("timeout", self.timeout)):
+            if type(value) not in (int, float) or (
+                isinstance(value, float) and not isfinite(value)
+            ):
+                raise ValueError(f"{name}은 유한한 숫자여야 합니다.")
 
 
 @dataclass(frozen=True, slots=True)

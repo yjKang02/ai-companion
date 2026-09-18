@@ -37,6 +37,9 @@ class Executor:
         self.release = asyncio.Event()
         self.release.set()
 
+    def validate(self, connection, selection):
+        pass
+
     async def generate(self, connection, selection, request):
         self.calls.append((connection, selection, request))
         if len(self.calls) == 2:
@@ -77,6 +80,13 @@ async def test_rooms_share_connection_but_keep_settings_and_history_independent(
     assert [len(call[2].messages) for call in executor.calls] == [2, 2, 4]
     assert len(await store.history(first.id)) == 4
     assert len(await store.history(second.id)) == 2
+
+
+async def test_service_leaves_provider_ranges_to_executor():
+    service, store, _, _ = setup()
+    selection = ModelSelection("local", "model-a", temperature=3, max_tokens=10000, timeout=900)
+    room = await service.create("방", RoomContext("캐릭터"), selection)
+    assert (await store.get(room.id)).model == selection
 
 
 async def test_edit_switches_connection_and_context_without_replacing_room_or_history():
