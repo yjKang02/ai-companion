@@ -9,6 +9,7 @@ from weakref import WeakValueDictionary
 from ai_companion.application.ports import InvalidModelOutput
 from ai_companion.application.room_ports import (
     ConnectionUnavailable,
+    InputReceipts,
     ModelConnections,
     ModelExecutor,
     RevisionConflict,
@@ -29,6 +30,7 @@ from ai_companion.domain import (
     RoomModelConfig,
     RoomRuntimeBinding,
     RoomTurn,
+    StoredRoomInput,
     TurnState,
 )
 
@@ -40,11 +42,13 @@ class RoomService:
         connections: ModelConnections,
         executor: ModelExecutor,
         bindings: RoomBindings,
+        receipts: InputReceipts,
     ) -> None:
         self._rooms = rooms
         self._connections = connections
         self._executor = executor
         self._bindings = bindings
+        self._receipts = receipts
         self._locks: WeakValueDictionary[str, asyncio.Lock] = WeakValueDictionary()
         self._changes: WeakValueDictionary[str, asyncio.Lock] = WeakValueDictionary()
 
@@ -127,6 +131,7 @@ class RoomService:
         async with self._change_lock(room_id):
             await self._rooms.delete(room_id, expected_revision)
             await self._bindings.delete(room_id)
+            await self._receipts.delete(room_id)
 
     async def respond(self, incoming: RoomInput) -> RoomTurn:
         if (
@@ -141,7 +146,15 @@ class RoomService:
             async with self._change_lock(incoming.room_id):
                 room = await self._rooms.get(incoming.room_id)
                 binding = await self._bindings.get(room.id)
-                turn, accepted = await self._rooms.accept(incoming, room.revision)
+                receipt = await self._receipts.reserve(
+                    room.id, incoming.source, incoming.request_id
+                )
+                stored_input = StoredRoomInput(receipt.input_id, room.id, incoming.text)
+                turn, accepted = await self._rooms.accept(
+                    stored_input, room.revision, allow_new=not receipt.accepted
+                )
+                # 두 저장소의 전체 원자성을 가정하지 않는다. 확정 실패 시 모델은 호출하지 않는다.
+                await self._receipts.mark_accepted(receipt)
             if not accepted:
                 return turn
             try:

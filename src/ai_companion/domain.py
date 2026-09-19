@@ -169,9 +169,31 @@ class Room:
 
 @dataclass(frozen=True, slots=True)
 class RoomInput:
+    """인증 경계에서 넘기는 실행 명령. 방 저장소에 그대로 보관하지 않는다."""
+
     room_id: str
-    source: str
-    request_id: str
+    source: str = field(repr=False)
+    request_id: str = field(repr=False)
+    text: str = field(repr=False)
+
+
+@dataclass(frozen=True, slots=True)
+class InputReceipt:
+    """설치 내부의 외부 입력 대응표. 본문은 외부 방 저장소만 소유한다."""
+
+    input_id: str
+    room_id: str
+    source: str = field(repr=False)
+    request_id: str = field(repr=False)
+    accepted: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class StoredRoomInput:
+    """방에 보관하는 입력. 외부 계정·채팅·요청 식별자를 포함하지 않는다."""
+
+    id: str
+    room_id: str
     text: str = field(repr=False)
 
 
@@ -185,7 +207,7 @@ class TurnState(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class RoomTurn:
-    input: RoomInput
+    input: StoredRoomInput
     room_revision: int
     state: TurnState = TurnState.PENDING
     result: ChatResult | None = field(default=None, repr=False)

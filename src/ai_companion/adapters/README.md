@@ -6,4 +6,6 @@
 - [room_memory.py](room_memory.py): 새 방·모델 연결·별도 실행 바인딩·입력 경로·입력 상태의 메모리 검증 구현. `InMemoryRoomBindings`는 generation을 검사하고 연결 해제에도 증가시킨다. 영구 저장소가 아니다.
 - [model_executor.py](model_executor.py): 공유 HTTP 클라이언트에서 방별 모델 설정을 검증하고 비밀 참조를 해석해 기존 LM Studio 어댑터로 실행한다.
 
+`room_memory.py`의 `InMemoryInputReceipts`는 외부 입력 출처·요청 키를 방 ID·불투명 입력 ID에 대응시킨다. 본문은 저장하지 않으며 `InMemoryRoomStore`의 입력·턴에는 외부 서비스 식별자를 넣지 않는다. 접수표도 메모리 구현이므로 영구 중복 방지·삭제 복구·삭제 후 재연결의 과거 이벤트 차단을 보장하지 않는다.
+
 어댑터를 추가할 때 기존 대화 경로의 [공통 대화 포트](../application/ports.py) 또는 새 방 경로의 [방 실행 포트](../application/room_ports.py)에서 해당 계약을 구현하고 [조립 지점](../bootstrap.py)에 연결한다.

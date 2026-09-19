@@ -4,6 +4,7 @@ from dataclasses import replace
 import pytest
 
 from ai_companion.adapters.room_memory import (
+    InMemoryInputReceipts,
     InMemoryModelConnections,
     InMemoryRoomBindings,
     InMemoryRoomRoutes,
@@ -59,7 +60,7 @@ def setup():
     connections.register(ModelConnection("second", "lmstudio", "http://localhost:2345/v1"))
     executor = Executor()
     return (
-        RoomService(store, connections, executor, InMemoryRoomBindings()),
+        RoomService(store, connections, executor, InMemoryRoomBindings(), InMemoryInputReceipts()),
         store,
         connections,
         executor,
@@ -82,7 +83,7 @@ async def test_rooms_share_connection_but_keep_settings_and_history_independent(
     second = await create(service, model="model-b")
     assert first.id != second.id
     await service.respond(incoming(first))
-    await service.respond(incoming(second))
+    await service.respond(incoming(second, "second-1"))
     await service.respond(incoming(first, "2", text="다시"))
     assert [call[1].model_id for call in executor.calls] == ["model-a", "model-b", "model-a"]
     assert [len(call[2].messages) for call in executor.calls] == [2, 2, 4]
@@ -196,7 +197,10 @@ async def test_other_room_can_run_while_one_room_waits():
     first = await create(service)
     second = await create(service)
     executor.release.clear()
-    tasks = [asyncio.create_task(service.respond(incoming(room))) for room in (first, second)]
+    tasks = [
+        asyncio.create_task(service.respond(incoming(room, str(index))))
+        for index, room in enumerate((first, second))
+    ]
     try:
         await asyncio.wait_for(executor.two_entered.wait(), 1)
     finally:

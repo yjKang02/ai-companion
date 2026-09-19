@@ -10,6 +10,7 @@ from ai_companion.adapters.model_executor import LMStudioExecutor
 from ai_companion.application.conversation import ConversationService
 from ai_companion.application.ports import ChatModel, Messenger
 from ai_companion.application.room_ports import (
+    InputReceipts,
     ModelConnections,
     RoomBindings,
     RoomStore,
@@ -26,10 +27,11 @@ async def room_backend(
     connections: ModelConnections,
     secrets: SecretProvider,
     bindings: RoomBindings,
+    receipts: InputReceipts,
 ) -> AsyncIterator[RoomService]:
     """새 방 백엔드의 조립 지점. 저장소 수명과 실제 수신은 호출자가 관리한다."""
     async with httpx.AsyncClient(trust_env=False, follow_redirects=False) as client:
-        yield RoomService(rooms, connections, LMStudioExecutor(client, secrets), bindings)
+        yield RoomService(rooms, connections, LMStudioExecutor(client, secrets), bindings, receipts)
 
 
 async def run_bot(env: Mapping[str, str]) -> None:
