@@ -17,6 +17,7 @@ from ai_companion.domain import (
     Role,
     Room,
     RoomInput,
+    RoomRuntimeBinding,
     RoomTurn,
     TurnState,
 )
@@ -46,6 +47,27 @@ class InMemoryModelConnections:
             return self._items[connection_id]
         except KeyError:
             raise ConnectionUnavailable("등록된 모델 연결을 찾을 수 없습니다.") from None
+
+
+class InMemoryRoomBindings:
+    def __init__(self) -> None:
+        self._bindings: dict[str, RoomRuntimeBinding] = {}
+
+    async def get(self, room_id: str) -> RoomRuntimeBinding:
+        return self._bindings.get(room_id, RoomRuntimeBinding(room_id))
+
+    async def set(
+        self, room_id: str, connection_id: str | None, expected_generation: int
+    ) -> RoomRuntimeBinding:
+        current = self._bindings.get(room_id, RoomRuntimeBinding(room_id))
+        if current.generation != expected_generation:
+            raise RevisionConflict("방의 실행 연결이 변경되었습니다.")
+        binding = RoomRuntimeBinding(room_id, connection_id, expected_generation + 1)
+        self._bindings[room_id] = binding
+        return binding
+
+    async def delete(self, room_id: str) -> None:
+        self._bindings.pop(room_id, None)
 
 
 class InMemoryRoomRoutes:

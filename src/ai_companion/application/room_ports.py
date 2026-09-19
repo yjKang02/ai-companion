@@ -11,6 +11,7 @@ from ai_companion.domain import (
     ModelSelection,
     Room,
     RoomInput,
+    RoomRuntimeBinding,
     RoomTurn,
     TurnState,
 )
@@ -38,6 +39,22 @@ class ConnectionUnavailable(Exception):
 
 class ModelConnections(Protocol):
     async def get(self, connection_id: str) -> ModelConnection: ...
+
+
+class RoomBindings(Protocol):
+    async def get(self, room_id: str) -> RoomRuntimeBinding:
+        """미등록은 generation=0인 미연결 값. 방 존재 여부는 호출자가 확인한다."""
+        ...
+
+    async def set(
+        self, room_id: str, connection_id: str | None, expected_generation: int
+    ) -> RoomRuntimeBinding:
+        """예상 generation 검사와 증가를 원자적으로 수행한다. None은 연결 해제다."""
+        ...
+
+    async def delete(self, room_id: str) -> None:
+        """방 삭제 후 내부 바인딩을 제거한다. 없는 바인딩은 무시한다."""
+        ...
 
 
 class SecretProvider(Protocol):

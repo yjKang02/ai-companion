@@ -2,8 +2,12 @@ import httpx
 import pytest
 
 from ai_companion import bootstrap
-from ai_companion.adapters.room_memory import InMemoryModelConnections, InMemoryRoomStore
-from ai_companion.domain import ModelConnection, ModelSelection, RoomContext, RoomInput
+from ai_companion.adapters.room_memory import (
+    InMemoryModelConnections,
+    InMemoryRoomBindings,
+    InMemoryRoomStore,
+)
+from ai_companion.domain import ModelConnection, RoomContext, RoomInput, RoomModelConfig
 
 
 class NoSecrets:
@@ -22,8 +26,11 @@ async def test_composition_executes_room_and_closes_shared_client_on_failure(mon
     connections = InMemoryModelConnections()
     connections.register(ModelConnection("local", "lmstudio", "http://localhost:1234/v1"))
     with pytest.raises(RuntimeError, match="종료"):
-        async with bootstrap.room_backend(InMemoryRoomStore(), connections, NoSecrets()) as service:
-            room = await service.create("방", RoomContext("친구"), ModelSelection("local", "test"))
+        async with bootstrap.room_backend(
+            InMemoryRoomStore(), connections, NoSecrets(), InMemoryRoomBindings()
+        ) as service:
+            room = await service.create("방", RoomContext("친구"), RoomModelConfig("test"))
+            await service.bind(room.id, room.revision, 0, "local")
             result = await service.respond(RoomInput(room.id, "web", "1", "안녕"))
             assert result.result.text == "응답"
             assert not client.is_closed
