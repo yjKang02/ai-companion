@@ -79,6 +79,10 @@ class RoomService:
     async def get(self, room_id: str) -> Room:
         return await self._rooms.get(room_id)
 
+    async def list_rooms(self) -> tuple[Room, ...]:
+        """사용 가능한 방의 현재 콘텐츠를 조회한다. 생성·삭제 복구 중인 방은 제외한다."""
+        return await self._rooms.list_rooms()
+
     async def history(self, room_id: str) -> tuple[ChatMessage, ...]:
         return await self._rooms.history(room_id)
 

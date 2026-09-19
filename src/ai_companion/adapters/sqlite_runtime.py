@@ -103,6 +103,13 @@ class SqliteRuntimeDatabase:
                             "SELECT source, request_id, room_id, input_id, accepted "
                             "FROM input_receipts LIMIT 0"
                         )
+                        if db.execute("PRAGMA user_version").fetchone()[0] == 2:
+                            db.execute("SELECT slot, id FROM library LIMIT 0")
+                            db.execute(
+                                "SELECT room_id, storage_id, phase, folder_device, folder_inode "
+                                "FROM room_registry LIMIT 0"
+                            )
+                            db.execute("SELECT room_id FROM retired_rooms LIMIT 0")
                         return resolved, storage_id
             except (OSError, sqlite3.Error) as error:
                 report_failure("open", error)
@@ -115,10 +122,9 @@ class SqliteRuntimeDatabase:
 
     @staticmethod
     def _identity(db: sqlite3.Connection) -> str:
-        if (
-            db.execute("PRAGMA application_id").fetchone()[0] != _APPLICATION_ID
-            or db.execute("PRAGMA user_version").fetchone()[0] != _VERSION
-        ):
+        if db.execute("PRAGMA application_id").fetchone()[0] != _APPLICATION_ID or db.execute(
+            "PRAGMA user_version"
+        ).fetchone()[0] not in (1, 2):
             raise StorageUnavailable("지원하지 않는 내부 DB 종류 또는 스키마 버전입니다.")
         row = db.execute("SELECT storage_id FROM metadata WHERE id = 1").fetchone()
         if row is None or not isinstance(row[0], str) or not row[0]:

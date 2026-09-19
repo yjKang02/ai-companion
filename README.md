@@ -2,15 +2,15 @@
 
 원격 저장소: [yjKang02/ai-companion](https://github.com/yjKang02/ai-companion)
 
-독립된 대화방에서 캐릭터와 대화하고 방별 모델·페르소나·메신저를 설정하는 개인용 AI Companion을 개발한다. 채택한 구현 방향은 [로컬 서버 + 로컬 웹 UI](docs/결정/002-로컬서버-웹UI.md)다. 현재 CLI는 기존 Python 기반 Discord·LM Studio 경로로 실행된다. 새 방 백엔드·내부 운영 SQLite·방별 SQLite 파일 구성요소는 추가했지만 CLI 전환·방 등록/삭제를 포함한 영구 저장 조립·웹 서버·웹 UI는 아직 제공하지 않는다. 단계별 상태의 원본은 [작업 목록](docs/프로젝트.md#작업-목록)이다.
+독립된 대화방에서 캐릭터와 대화하고 방별 모델·페르소나·메신저를 설정하는 개인용 AI Companion을 개발한다. 채택한 구현 방향은 [로컬 서버 + 로컬 웹 UI](docs/결정/002-로컬서버-웹UI.md)다. 현재 CLI는 기존 Python 기반 Discord·LM Studio 경로로 실행된다. 새 방 백엔드에는 내부 운영 SQLite·방별 SQLite·등록/삭제 복구 조립을 제공하지만 CLI 전환·웹 서버·웹 UI는 아직 제공하지 않는다. 단계별 상태의 원본은 [작업 목록](docs/프로젝트.md#작업-목록)이다.
 
 2026-09-17부터 다음 개발은 [방별 컨텍스트 편집·삭제·영구 저장을 갖춘 개인용 채팅 기반](docs/기초설계.md)을 중심으로 설계한다. 아래 실행 안내는 기존 Discord·LM Studio 연결 구현에 해당하며, 현재 메모리 저장소는 새 재시작 보존 요구를 충족하지 않는다.
 
 다음 개발은 [구현 순서](docs/프로젝트.md#구현-순서)와 [문서 안내](docs/README.md)에서 시작한다. 브랜치 이력과 CI·리뷰 설정은 [저장소 운영](docs/저장소운영.md)에서 관리한다.
 
-새 [백엔드 구조](docs/백엔드구현설계.md)는 방별 모델 실행·revision·명시적 라우팅과 메모리 검증 어댑터부터 추가하고 있다. `bootstrap.room_backend()`가 새 조립 지점이며, 아래 `run` CLI는 아직 기존 Discord 경로를 사용한다. 새 HTTP 서버·영구 저장·웹 화면의 실행 명령은 제공하지 않는다.
+새 [백엔드 구조](docs/백엔드구현설계.md)는 방별 모델 실행·revision·명시적 라우팅을 제공한다. `bootstrap.room_backend()`는 저장소 주입용, `bootstrap.persistent_room_backend()`는 영구 방 저장소 조립용이다. 아래 `run` CLI는 아직 기존 Discord 경로를 사용한다. 새 HTTP 서버·영구 저장·웹 화면의 실행 명령은 제공하지 않는다.
 
-[내부 SQLite 어댑터](src/ai_companion/adapters/sqlite_runtime.py)는 모델 연결·방 바인딩·입력 접수표를 보존한다. [방별 SQLite 구성요소](src/ai_companion/adapters/sqlite_room.py)는 별도 파일에 방 설정·입력·응답을 보존하며, 새 프로세스에서 다시 읽는 테스트를 제공한다. 다만 방 등록부·파일 게시·삭제 복구를 갖춘 `RoomStore` 조립은 아직 없다. 개발용 사용과 제한은 [내부 SQLite 계약](docs/백엔드구현설계.md#내부-운영-sqlite-어댑터)과 [방별 파일 계약](docs/백엔드구현설계.md#방별-sqlite-파일-구현-경계)을 따른다. 기본 CLI에는 자동 연결하지 않는다.
+[내부 SQLite 어댑터](src/ai_companion/adapters/sqlite_runtime.py)는 모델 연결·방 바인딩·입력 접수표를 보존한다. [방별 SQLite 구성요소](src/ai_companion/adapters/sqlite_room.py)는 별도 파일에 방 설정·입력·응답을 보존한다. [영구 방 저장소](src/ai_companion/adapters/persistent_rooms.py)는 내부 v2 등록부·단일 실행자 잠금·방 목록·파일 게시·삭제 복구를 조립한다. 신규 초기화와 백업을 포함한 v1→v2 이전은 명시적으로 실행하며, 파일 누락·손상 시 자동 재생성하지 않는다. 개발용 사용과 제한은 [영구 방 수명주기 계약](docs/백엔드구현설계.md#영구-방-수명주기-조립-계약)을 따른다. 외부 페르소나 파일·비밀 저장·기본 CLI 연결은 후속 범위다.
 
 현재 폴더에서 프로그래밍을 시작한다는 사용자 요청에 따라 코드와 문서를 함께 관리한다. 기존 계획·설계·조사는 [docs](docs/프로젝트.md)로 이동했다. 작업 상태·목표일의 원본은 [프로젝트 문서](docs/프로젝트.md#작업-목록)다.
 

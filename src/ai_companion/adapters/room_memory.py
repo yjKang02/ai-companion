@@ -143,6 +143,9 @@ class InMemoryRoomStore:
         except KeyError:
             raise RoomNotFound("방을 찾을 수 없습니다.") from None
 
+    async def list_rooms(self) -> tuple[Room, ...]:
+        return tuple(self._rooms[key] for key in sorted(self._rooms))
+
     async def update(self, room: Room, expected_revision: int) -> None:
         current = await self.get(room.id)
         if current.revision != expected_revision or room.revision != expected_revision + 1:

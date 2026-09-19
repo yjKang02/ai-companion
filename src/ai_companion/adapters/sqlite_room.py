@@ -59,7 +59,7 @@ _SCHEMA = (
 )
 
 
-def _validate_room(room: Room) -> None:
+def validate_room(room: Room) -> None:
     if not isinstance(room.model, RoomModelConfig):
         raise TypeError("방에는 연결 ID 없는 모델 설정만 저장할 수 있습니다.")
     if not room.id.strip() or not room.name.strip() or not room.context.character.strip():
@@ -93,9 +93,14 @@ class SqliteRoomDatabase:
     def __init__(self, path: Path, room_id: str, storage_id: str) -> None:
         self._path, self._room_id, self._storage_id = path, room_id, storage_id
 
+    @property
+    def storage_id(self) -> str:
+        """등록부가 같은 방 ID의 다른 파일 교체를 검사할 때 사용하는 불투명 식별자."""
+        return self._storage_id
+
     @classmethod
     async def create(cls, path: Path, room: Room) -> "SqliteRoomDatabase":
-        _validate_room(room)
+        validate_room(room)
         if room.revision != 1:
             raise RevisionConflict("새 방은 revision 1에서 시작해야 합니다.")
 
@@ -223,14 +228,14 @@ class SqliteRoomDatabase:
             RoomModelConfig(row["model_id"], row["temperature"], row["max_tokens"], row["timeout"]),
             row["revision"],
         )
-        _validate_room(room)
+        validate_room(room)
         return room
 
     async def get(self) -> Room:
         return await self._run(self._read_room)
 
     async def update(self, room: Room, expected_revision: int) -> None:
-        _validate_room(room)
+        validate_room(room)
         if room.id != self._room_id or room.revision != expected_revision + 1:
             raise RevisionConflict("방 ID 또는 revision이 올바르지 않습니다.")
 
