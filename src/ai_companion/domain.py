@@ -90,8 +90,9 @@ class MessengerConnection:
 
 
 @dataclass(frozen=True, slots=True)
-class ModelSelection:
-    connection_id: str
+class RoomModelConfig:
+    """이동 가능한 방 콘텐츠. 로컬 연결이나 비밀 참조를 포함하지 않는다."""
+
     model_id: str
     temperature: float = 0.7
     max_tokens: int = 256
@@ -106,6 +107,38 @@ class ModelSelection:
                 isinstance(value, float) and not isfinite(value)
             ):
                 raise ValueError(f"{name}은 유한한 숫자여야 합니다.")
+
+    def select(self, connection_id: str) -> "ModelSelection":
+        return ModelSelection(
+            connection_id, self.model_id, self.temperature, self.max_tokens, self.timeout
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ModelSelection:
+    """실행 시에만 조립하는 모델 선택. 방 콘텐츠 저장에 사용하지 않는다."""
+
+    connection_id: str
+    model_id: str
+    temperature: float = 0.7
+    max_tokens: int = 256
+    timeout: float = 60
+
+    @property
+    def config(self) -> RoomModelConfig:
+        return RoomModelConfig(self.model_id, self.temperature, self.max_tokens, self.timeout)
+
+    def validate_options(self) -> None:
+        self.config.validate_options()
+
+
+@dataclass(frozen=True, slots=True)
+class RoomRuntimeBinding:
+    """개인 설치 내부의 실행 연결. 해제도 generation을 증가시킨다."""
+
+    room_id: str
+    connection_id: str | None = None
+    generation: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,7 +163,7 @@ class Room:
     id: str
     name: str
     context: RoomContext
-    model: ModelSelection
+    model: RoomModelConfig
     revision: int = 1
 
 

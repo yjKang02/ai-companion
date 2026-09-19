@@ -5,6 +5,7 @@ import pytest
 
 from ai_companion.adapters.room_memory import (
     InMemoryModelConnections,
+    InMemoryRoomBindings,
     InMemoryRoomRoutes,
     InMemoryRoomStore,
 )
@@ -21,9 +22,9 @@ from ai_companion.domain import (
     ChatResult,
     InputRoute,
     ModelConnection,
-    ModelSelection,
     RoomContext,
     RoomInput,
+    RoomModelConfig,
     TurnState,
 )
 
@@ -57,11 +58,18 @@ def setup():
     connections.register(ModelConnection("local", "lmstudio", "http://localhost:1234/v1"))
     connections.register(ModelConnection("second", "lmstudio", "http://localhost:2345/v1"))
     executor = Executor()
-    return RoomService(store, connections, executor), store, connections, executor
+    return (
+        RoomService(store, connections, executor, InMemoryRoomBindings()),
+        store,
+        connections,
+        executor,
+    )
 
 
 async def create(service, name="방", connection="local", model="model-a"):
-    return await service.create(name, RoomContext("친절한 친구"), ModelSelection(connection, model))
+    room = await service.create(name, RoomContext("친절한 친구"), RoomModelConfig(model))
+    await service.bind(room.id, room.revision, 0, connection)
+    return room
 
 
 def incoming(room, request_id="1", source="web", text="안녕"):
@@ -84,8 +92,9 @@ async def test_rooms_share_connection_but_keep_settings_and_history_independent(
 
 async def test_service_leaves_provider_ranges_to_executor():
     service, store, _, _ = setup()
-    selection = ModelSelection("local", "model-a", temperature=3, max_tokens=10000, timeout=900)
+    selection = RoomModelConfig("model-a", temperature=3, max_tokens=10000, timeout=900)
     room = await service.create("방", RoomContext("캐릭터"), selection)
+    await service.bind(room.id, room.revision, 0, "local")
     assert (await store.get(room.id)).model == selection
 
 
@@ -98,8 +107,9 @@ async def test_edit_switches_connection_and_context_without_replacing_room_or_hi
         1,
         name="새 이름",
         context=RoomContext("새 역할"),
-        model=ModelSelection("second", "model-b"),
+        model=RoomModelConfig("model-b"),
     )
+    await service.bind(room.id, edited.revision, 1, "second")
     await service.respond(incoming(edited, "2"))
     assert edited.id == room.id and edited.revision == 2
     assert executor.calls[-1][0].id == "second"
@@ -122,7 +132,9 @@ async def test_duplicate_input_returns_original_result_and_changed_body_conflict
     assert len(executor.calls) == 2
 
 
-@pytest.mark.parametrize("action", ["edit", "delete", "connection", "disable"])
+@pytest.mark.parametrize(
+    "action", ["edit", "delete", "connection", "disable", "bind", "unbind", "aba"]
+)
 async def test_late_results_are_not_saved_after_execution_settings_change(action):
     service, store, connections, executor = setup()
     room = await create(service)
@@ -136,6 +148,10 @@ async def test_late_results_are_not_saved_after_execution_settings_change(action
         )
     elif action == "delete":
         await service.delete(room.id, 1)
+    elif action in ("bind", "unbind", "aba"):
+        await service.bind(room.id, 1, 1, None if action == "unbind" else "second")
+        if action == "aba":
+            await service.bind(room.id, 1, 2, "local")
     else:
         connection = await connections.get("local")
         connections.update(replace(connection, revision=2, enabled=action != "disable"), 1)

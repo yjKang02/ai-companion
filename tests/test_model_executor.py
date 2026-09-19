@@ -5,7 +5,11 @@ import httpx
 import pytest
 
 from ai_companion.adapters.model_executor import LMStudioExecutor
-from ai_companion.adapters.room_memory import InMemoryModelConnections, InMemoryRoomStore
+from ai_companion.adapters.room_memory import (
+    InMemoryModelConnections,
+    InMemoryRoomBindings,
+    InMemoryRoomStore,
+)
 from ai_companion.application.room_ports import ConnectionUnavailable
 from ai_companion.application.rooms import RoomService
 from ai_companion.config import ConfigurationError
@@ -16,6 +20,7 @@ from ai_companion.domain import (
     ModelSelection,
     Role,
     RoomContext,
+    RoomModelConfig,
 )
 
 
@@ -93,7 +98,7 @@ class RecordingStore(InMemoryRoomStore):
         await super().update(room, expected_revision)
 
 
-@pytest.mark.parametrize("operation", ["create", "update"])
+@pytest.mark.parametrize("operation", ["bind", "update"])
 @pytest.mark.parametrize(
     ("field", "value"),
     [
@@ -120,7 +125,7 @@ class RecordingStore(InMemoryRoomStore):
         ("base_url", "http://remote.invalid/v1"),
     ],
 )
-async def test_room_rejects_invalid_settings_before_saving(operation, field, value):
+async def test_binding_or_connected_model_edit_rejects_invalid_settings(operation, field, value):
     def handle(request):
         pytest.fail("설정 저장 중 HTTP 요청이 발생했습니다.")
 
@@ -130,18 +135,25 @@ async def test_room_rejects_invalid_settings_before_saving(operation, field, val
     connections.register(connection)
     secrets = Secrets()
     async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
-        service = RoomService(store, connections, LMStudioExecutor(client, secrets))
-        room = await service.create(
-            "기존 방", RoomContext("기존 캐릭터"), ModelSelection("local", "a")
-        )
-        model = room.model
+        bindings = InMemoryRoomBindings()
+        service = RoomService(store, connections, LMStudioExecutor(client, secrets), bindings)
+        room = await service.create("기존 방", RoomContext("기존 캐릭터"), RoomModelConfig("a"))
+        if operation == "update":
+            await service.bind(room.id, room.revision, 0, "local")
+        model = replace(room.model, model_id="b")
         if field in ("provider", "base_url"):
             connections.update(replace(connection, **{field: value}, revision=2), 1)
         else:
             model = replace(model, **{field: value})
+        if operation == "bind":
+            # 저장소에서 읽은 미연결 콘텐츠도 연결 시 공급자 검증을 우회할 수 없다.
+            room = replace(room, model=model, revision=2)
+            await store.update(room, 1)
+        previous_writes = list(store.writes)
+        previous_binding = await service.binding(room.id)
         with pytest.raises((ValueError, ConfigurationError, ConnectionUnavailable)):
-            if operation == "create":
-                await service.create("새 방", RoomContext("새 캐릭터"), model)
+            if operation == "bind":
+                await service.bind(room.id, room.revision, 0, "local")
             else:
                 await service.update(
                     room.id,
@@ -150,7 +162,8 @@ async def test_room_rejects_invalid_settings_before_saving(operation, field, val
                     context=RoomContext("새 캐릭터"),
                     model=model,
                 )
-        assert store.writes == ["create"]
+        assert store.writes == previous_writes
+        assert await service.binding(room.id) == previous_binding
         assert await store.get(room.id) == room
         assert await store.history(room.id) == ()
     assert secrets.requested == []
@@ -174,10 +187,13 @@ async def test_valid_boundary_settings_can_be_saved_without_model_or_secret_acce
     )
     secrets = Secrets()
     async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
-        service = RoomService(store, connections, LMStudioExecutor(client, secrets))
-        room = await service.create("방", RoomContext("캐릭터"), selection)
+        service = RoomService(
+            store, connections, LMStudioExecutor(client, secrets), InMemoryRoomBindings()
+        )
+        room = await service.create("방", RoomContext("캐릭터"), selection.config)
+        await service.bind(room.id, room.revision, 0, selection.connection_id)
         edited = await service.update(
-            room.id, room.revision, name="편집", context=room.context, model=selection
+            room.id, room.revision, name="편집", context=room.context, model=selection.config
         )
         assert edited.revision == room.revision + 1
         assert await store.get(room.id) == edited
