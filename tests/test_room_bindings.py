@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from ai_companion.adapters.room_memory import (
+    InMemoryInputReceipts,
     InMemoryModelConnections,
     InMemoryRoomBindings,
     InMemoryRoomStore,
@@ -54,7 +55,7 @@ def backend():
     )
     bindings = InMemoryRoomBindings()
     executor = Executor()
-    service = RoomService(rooms, connections, executor, bindings)
+    service = RoomService(rooms, connections, executor, bindings, InMemoryInputReceipts())
     return service, rooms, connections, bindings, executor
 
 

@@ -6,6 +6,7 @@ import pytest
 
 from ai_companion.adapters.model_executor import LMStudioExecutor
 from ai_companion.adapters.room_memory import (
+    InMemoryInputReceipts,
     InMemoryModelConnections,
     InMemoryRoomBindings,
     InMemoryRoomStore,
@@ -136,7 +137,9 @@ async def test_binding_or_connected_model_edit_rejects_invalid_settings(operatio
     secrets = Secrets()
     async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
         bindings = InMemoryRoomBindings()
-        service = RoomService(store, connections, LMStudioExecutor(client, secrets), bindings)
+        service = RoomService(
+            store, connections, LMStudioExecutor(client, secrets), bindings, InMemoryInputReceipts()
+        )
         room = await service.create("기존 방", RoomContext("기존 캐릭터"), RoomModelConfig("a"))
         if operation == "update":
             await service.bind(room.id, room.revision, 0, "local")
@@ -188,7 +191,11 @@ async def test_valid_boundary_settings_can_be_saved_without_model_or_secret_acce
     secrets = Secrets()
     async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
         service = RoomService(
-            store, connections, LMStudioExecutor(client, secrets), InMemoryRoomBindings()
+            store,
+            connections,
+            LMStudioExecutor(client, secrets),
+            InMemoryRoomBindings(),
+            InMemoryInputReceipts(),
         )
         room = await service.create("방", RoomContext("캐릭터"), selection.config)
         await service.bind(room.id, room.revision, 0, selection.connection_id)

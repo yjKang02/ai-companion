@@ -3,6 +3,7 @@ import pytest
 
 from ai_companion import bootstrap
 from ai_companion.adapters.room_memory import (
+    InMemoryInputReceipts,
     InMemoryModelConnections,
     InMemoryRoomBindings,
     InMemoryRoomStore,
@@ -27,7 +28,11 @@ async def test_composition_executes_room_and_closes_shared_client_on_failure(mon
     connections.register(ModelConnection("local", "lmstudio", "http://localhost:1234/v1"))
     with pytest.raises(RuntimeError, match="종료"):
         async with bootstrap.room_backend(
-            InMemoryRoomStore(), connections, NoSecrets(), InMemoryRoomBindings()
+            InMemoryRoomStore(),
+            connections,
+            NoSecrets(),
+            InMemoryRoomBindings(),
+            InMemoryInputReceipts(),
         ) as service:
             room = await service.create("방", RoomContext("친구"), RoomModelConfig("test"))
             await service.bind(room.id, room.revision, 0, "local")

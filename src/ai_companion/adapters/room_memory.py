@@ -1,6 +1,7 @@
 """연결 구조 검증 전용. 재시작 보존을 제공하지 않는다."""
 
 from dataclasses import replace
+from uuid import uuid4
 
 from ai_companion.application.room_ports import (
     ConnectionUnavailable,
@@ -12,13 +13,14 @@ from ai_companion.application.room_ports import (
 from ai_companion.domain import (
     ChatMessage,
     ChatResult,
+    InputReceipt,
     InputRoute,
     ModelConnection,
     Role,
     Room,
-    RoomInput,
     RoomRuntimeBinding,
     RoomTurn,
+    StoredRoomInput,
     TurnState,
 )
 
@@ -70,6 +72,38 @@ class InMemoryRoomBindings:
         self._bindings.pop(room_id, None)
 
 
+class InMemoryInputReceipts:
+    def __init__(self) -> None:
+        self._receipts: dict[tuple[str, str], InputReceipt] = {}
+
+    async def reserve(self, room_id: str, source: str, request_id: str) -> InputReceipt:
+        if not room_id.strip() or not source.strip() or not request_id.strip():
+            raise ValueError("방과 입력 식별자가 필요합니다.")
+        key = (source, request_id)
+        previous = self._receipts.get(key)
+        if previous is not None:
+            if previous.room_id != room_id:
+                raise InputConflict("이미 다른 방에 배정된 입력입니다.")
+            return previous
+        receipt = InputReceipt(str(uuid4()), room_id, source, request_id)
+        self._receipts[key] = receipt
+        return receipt
+
+    async def mark_accepted(self, receipt: InputReceipt) -> None:
+        key = (receipt.source, receipt.request_id)
+        previous = self._receipts.get(key)
+        if previous is None or replace(previous, accepted=False) != replace(
+            receipt, accepted=False
+        ):
+            raise InputConflict("예약되지 않은 입력입니다.")
+        self._receipts[key] = replace(previous, accepted=True)
+
+    async def delete(self, room_id: str) -> None:
+        self._receipts = {
+            key: value for key, value in self._receipts.items() if value.room_id != room_id
+        }
+
+
 class InMemoryRoomRoutes:
     def __init__(self) -> None:
         self._routes: dict[InputRoute, str] = {}
@@ -94,7 +128,7 @@ class InMemoryRoomStore:
         self._rooms: dict[str, Room] = {}
         self._used_ids: set[str] = set()
         self._history: dict[str, tuple[ChatMessage, ...]] = {}
-        self._turns: dict[tuple[str, str, str], RoomTurn] = {}
+        self._turns: dict[tuple[str, str], RoomTurn] = {}
 
     async def create(self, room: Room) -> None:
         if not room.id or room.id in self._used_ids or room.revision != 1:
@@ -127,16 +161,24 @@ class InMemoryRoomStore:
         await self.get(room_id)
         return self._history[room_id]
 
-    async def accept(self, incoming: RoomInput, expected_revision: int) -> tuple[RoomTurn, bool]:
+    async def accept(
+        self, incoming: StoredRoomInput, expected_revision: int, *, allow_new: bool = True
+    ) -> tuple[RoomTurn, bool]:
+        if not isinstance(incoming, StoredRoomInput):
+            raise TypeError("방 저장소에는 외부 식별자 없는 입력만 전달할 수 있습니다.")
+        if not incoming.id.strip() or not incoming.text.strip():
+            raise ValueError("내부 입력 ID와 본문이 필요합니다.")
         room = await self.get(incoming.room_id)
         if room.revision != expected_revision:
             raise RevisionConflict("방 설정이 변경되었습니다.")
-        key = (room.id, incoming.source, incoming.request_id)
+        key = (room.id, incoming.id)
         if key in self._turns:
             previous = self._turns[key]
             if previous.input != incoming:
                 raise InputConflict("같은 입력 ID에 다른 내용이 있습니다.")
             return previous, False
+        if not allow_new:
+            raise InputConflict("접수된 입력의 방 기록이 없습니다. 복구 확인이 필요합니다.")
         turn = RoomTurn(incoming, expected_revision)
         self._turns[key] = turn
         return turn, True
@@ -146,7 +188,7 @@ class InMemoryRoomStore:
     ) -> RoomTurn:
         if state == TurnState.PENDING or (state == TurnState.COMPLETED and result is None):
             raise ValueError("완료 상태와 결과를 확인하세요.")
-        key = (turn.input.room_id, turn.input.source, turn.input.request_id)
+        key = (turn.input.room_id, turn.input.id)
         room = self._rooms.get(turn.input.room_id)
         if room is None:
             return replace(turn, state=TurnState.SUPERSEDED, result=None)

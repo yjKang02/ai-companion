@@ -6,13 +6,14 @@ from ai_companion.domain import (
     ChatMessage,
     ChatRequest,
     ChatResult,
+    InputReceipt,
     InputRoute,
     ModelConnection,
     ModelSelection,
     Room,
-    RoomInput,
     RoomRuntimeBinding,
     RoomTurn,
+    StoredRoomInput,
     TurnState,
 )
 
@@ -61,6 +62,20 @@ class SecretProvider(Protocol):
     async def get(self, reference: str) -> str: ...
 
 
+class InputReceipts(Protocol):
+    async def reserve(self, room_id: str, source: str, request_id: str) -> InputReceipt:
+        """(source, request_id)에 불투명 ID를 원자적으로 할당. 다른 방 재할당은 충돌."""
+        ...
+
+    async def mark_accepted(self, receipt: InputReceipt) -> None:
+        """방 입력 저장 후 접수를 표시한다. 같은 receipt의 반복 확정은 허용한다."""
+        ...
+
+    async def delete(self, room_id: str) -> None:
+        """해당 방의 대응표를 제거한다. 영구 삭제 복구와 재수신 차단은 별도 계약이다."""
+        ...
+
+
 class ModelExecutor(Protocol):
     def validate(self, connection: ModelConnection, selection: ModelSelection) -> None:
         """지원 연결·주소·옵션을 검증한다. 비밀 조회나 네트워크 I/O를 하지 않는다."""
@@ -86,8 +101,10 @@ class RoomStore(Protocol):
 
     async def history(self, room_id: str) -> tuple[ChatMessage, ...]: ...
 
-    async def accept(self, incoming: RoomInput, expected_revision: int) -> tuple[RoomTurn, bool]:
-        """입력 접수와 중복 확인을 원자적으로 수행한다. bool은 신규 접수 여부다."""
+    async def accept(
+        self, incoming: StoredRoomInput, expected_revision: int, *, allow_new: bool = True
+    ) -> tuple[RoomTurn, bool]:
+        """내부 ID로 원자적 접수·본문 비교. allow_new=False면 누락된 입력을 복원하지 않는다."""
         ...
 
     async def finish(
