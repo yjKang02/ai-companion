@@ -69,6 +69,11 @@ logs/
 *.sqlite3-journal
 *.sqlite3-wal
 *.sqlite3-shm
+*.db.lock
+*.sqlite.lock
+*.sqlite3.lock
+.library-id
+.library-lock
 
 # Spyder 프로젝트 설정
 .spyderproject

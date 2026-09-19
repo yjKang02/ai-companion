@@ -1,5 +1,6 @@
 from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import httpx
 
@@ -7,6 +8,7 @@ from ai_companion.adapters.discord import DiscordMessenger
 from ai_companion.adapters.lmstudio import LMStudioChatModel
 from ai_companion.adapters.memory import InMemoryConversationStore
 from ai_companion.adapters.model_executor import LMStudioExecutor
+from ai_companion.adapters.persistent_rooms import persistent_room_store
 from ai_companion.application.conversation import ConversationService
 from ai_companion.application.ports import ChatModel, Messenger
 from ai_companion.application.room_ports import (
@@ -32,6 +34,19 @@ async def room_backend(
     """새 방 백엔드의 조립 지점. 저장소 수명과 실제 수신은 호출자가 관리한다."""
     async with httpx.AsyncClient(trust_env=False, follow_redirects=False) as client:
         yield RoomService(rooms, connections, LMStudioExecutor(client, secrets), bindings, receipts)
+
+
+@asynccontextmanager
+async def persistent_room_backend(
+    runtime_path: Path, library_path: Path, secrets: SecretProvider
+) -> AsyncIterator[RoomService]:
+    """초기화·v2 이전이 끝난 저장소를 복구하고 조립한다. 종료 전 요청을 모두 끝내야 한다."""
+    async with persistent_room_store(runtime_path, library_path) as rooms:
+        runtime = rooms.registry.runtime
+        async with room_backend(
+            rooms, runtime.connections, secrets, runtime.bindings, runtime.receipts
+        ) as service:
+            yield service
 
 
 async def run_bot(env: Mapping[str, str]) -> None:
