@@ -24,6 +24,31 @@ def connection(identifier="local"):
     return ModelConnection(identifier, "lmstudio", "http://localhost:1234/v1", "key-reference")
 
 
+@pytest.mark.parametrize("operation", ["create", "open", "read"])
+async def test_failure_logs_codes_but_never_exception_details(
+    tmp_path, monkeypatch, caplog, operation
+):
+    path = tmp_path / "private-file.db"
+    database = await SqliteRuntimeDatabase.create(path)
+    error = sqlite3.OperationalError("secret token and private SQL body")
+    error.sqlite_errorcode = sqlite3.SQLITE_FULL
+
+    def failing_connect(*args, **kwargs):
+        raise error
+
+    monkeypatch.setattr(sqlite_runtime.sqlite3, "connect", failing_connect)
+    with pytest.raises(StorageUnavailable):
+        if operation == "create":
+            await SqliteRuntimeDatabase.create(tmp_path / "new.db")
+        elif operation == "open":
+            await SqliteRuntimeDatabase.open(path)
+        else:
+            await database.connections.get("local")
+    assert f"operation={operation} category=sqlite code={sqlite3.SQLITE_FULL}" in caplog.text
+    assert "secret" not in caplog.text and "private" not in caplog.text
+    assert all(record.exc_info is None for record in caplog.records)
+
+
 async def test_reopen_preserves_connections_bindings_and_receipts(tmp_path):
     path = tmp_path / "개인 설정 #1.db"
     database = await SqliteRuntimeDatabase.create(path)
