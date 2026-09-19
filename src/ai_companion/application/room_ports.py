@@ -38,6 +38,10 @@ class ConnectionUnavailable(Exception):
     pass
 
 
+class StorageUnavailable(Exception):
+    """저장소 접근·손상·스키마 오류. 원문 DB 오류나 개인 경로를 노출하지 않는다."""
+
+
 class ModelConnections(Protocol):
     async def get(self, connection_id: str) -> ModelConnection: ...
 
