@@ -1,14 +1,27 @@
-from collections.abc import Mapping
+from collections.abc import AsyncIterator, Mapping
+from contextlib import asynccontextmanager
 
 import httpx
 
 from ai_companion.adapters.discord import DiscordMessenger
 from ai_companion.adapters.lmstudio import LMStudioChatModel
 from ai_companion.adapters.memory import InMemoryConversationStore
+from ai_companion.adapters.model_executor import LMStudioExecutor
 from ai_companion.application.conversation import ConversationService
 from ai_companion.application.ports import ChatModel, Messenger
+from ai_companion.application.room_ports import ModelConnections, RoomStore, SecretProvider
+from ai_companion.application.rooms import RoomService
 from ai_companion.config import ConversationSettings, DiscordSettings, ModelSettings
 from ai_companion.domain import ChatMessage, ChatRequest, Role
+
+
+@asynccontextmanager
+async def room_backend(
+    rooms: RoomStore, connections: ModelConnections, secrets: SecretProvider
+) -> AsyncIterator[RoomService]:
+    """새 방 백엔드의 조립 지점. 저장소 수명과 실제 수신은 호출자가 관리한다."""
+    async with httpx.AsyncClient(trust_env=False, follow_redirects=False) as client:
+        yield RoomService(rooms, connections, LMStudioExecutor(client, secrets))
 
 
 async def run_bot(env: Mapping[str, str]) -> None:
