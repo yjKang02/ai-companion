@@ -202,6 +202,7 @@ class TurnState(StrEnum):
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+    INTERRUPTED = "interrupted"
     SUPERSEDED = "superseded"
 
 

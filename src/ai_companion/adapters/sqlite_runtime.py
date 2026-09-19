@@ -1,7 +1,5 @@
 """설치 내부 운영 데이터의 SQLite 저장. 방 본문·키 원문은 저장하지 않는다."""
 
-import asyncio
-import logging
 import sqlite3
 from collections.abc import Callable
 from contextlib import closing
@@ -9,6 +7,7 @@ from pathlib import Path
 from typing import TypeVar
 from uuid import uuid4
 
+from ai_companion.adapters.sqlite_support import report_failure, settled_thread
 from ai_companion.application.room_ports import (
     ConnectionUnavailable,
     InputConflict,
@@ -18,7 +17,6 @@ from ai_companion.application.room_ports import (
 from ai_companion.domain import InputReceipt, ModelConnection, RoomRuntimeBinding
 
 _T = TypeVar("_T")
-_log = logging.getLogger(__name__)
 _APPLICATION_ID = 0x41494352
 _VERSION = 1
 _SCHEMA = (
@@ -37,43 +35,6 @@ _SCHEMA = (
         PRIMARY KEY(source, request_id))""",
     "CREATE INDEX receipts_by_room ON input_receipts(room_id)",
 )
-
-
-def _report_failure(operation: str, error: BaseException) -> None:
-    """진단 분류·숫자 코드만 기록한다. 예외 원문·경로·traceback은 로그에도 넣지 않는다."""
-    if isinstance(error, sqlite3.Error):
-        category, code = "sqlite", getattr(error, "sqlite_errorcode", None)
-    elif isinstance(error, OSError):
-        category, code = "os", error.errno
-    else:
-        category, code = "other", None
-    _log.warning(
-        "storage_failure operation=%s category=%s code=%s",
-        operation,
-        category,
-        code if type(code) is int else 0,
-    )
-
-
-async def _settled_thread(operation: Callable[[], _T]) -> _T:
-    """취소돼도 작업 스레드가 끝난 뒤 취소를 전파해 호출자의 변경 잠금을 유지한다."""
-    task = asyncio.create_task(asyncio.to_thread(operation))
-    cancelled = False
-    while not task.done():
-        try:
-            await asyncio.shield(task)
-        except asyncio.CancelledError:
-            cancelled = True
-        except Exception:
-            break
-    if cancelled:
-        # 취소 중 발생한 예외를 회수하되 저장 성공으로 반환하지 않는다.
-        if not task.cancelled():
-            error = task.exception()
-            if error is not None:
-                _report_failure("cancelled", error)
-        raise asyncio.CancelledError
-    return task.result()
 
 
 class SqliteRuntimeDatabase:
@@ -106,12 +67,12 @@ class SqliteRuntimeDatabase:
                         db.execute(f"PRAGMA user_version = {_VERSION}")
                 return resolved, storage_id
             except (OSError, sqlite3.Error) as error:
-                _report_failure("create", error)
+                report_failure("create", error)
                 raise StorageUnavailable(
                     "내부 DB를 생성하지 못했습니다. 기존 파일은 덮어쓰지 않습니다."
                 ) from None
 
-        resolved, storage_id = await _settled_thread(initialize)
+        resolved, storage_id = await settled_thread(initialize)
         return cls(resolved, storage_id)
 
     @classmethod
@@ -144,12 +105,12 @@ class SqliteRuntimeDatabase:
                         )
                         return resolved, storage_id
             except (OSError, sqlite3.Error) as error:
-                _report_failure("open", error)
+                report_failure("open", error)
                 raise StorageUnavailable(
                     "내부 DB를 열 수 없습니다. 파일·권한·손상을 확인하세요."
                 ) from None
 
-        resolved, storage_id = await _settled_thread(inspect)
+        resolved, storage_id = await settled_thread(inspect)
         return cls(resolved, storage_id)
 
     @staticmethod
@@ -182,12 +143,12 @@ class SqliteRuntimeDatabase:
                             )
                         return operation(db)
             except (OSError, sqlite3.Error) as error:
-                _report_failure("write" if write else "read", error)
+                report_failure("write" if write else "read", error)
                 raise StorageUnavailable(
                     "내부 DB 작업에 실패했습니다. 저장 결과를 확인하세요."
                 ) from None
 
-        return await _settled_thread(execute)
+        return await settled_thread(execute)
 
 
 class SqliteModelConnections:
