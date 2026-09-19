@@ -1,6 +1,7 @@
 import asyncio
 import sqlite3
 import threading
+from contextlib import closing
 from dataclasses import replace
 from unittest.mock import AsyncMock, Mock
 
@@ -66,11 +67,11 @@ async def test_invalid_database_is_rejected_without_rewriting(tmp_path, kind):
     elif kind == "garbage":
         path.write_bytes(b"private invalid content")
     elif kind == "unrelated":
-        with sqlite3.connect(path) as db:
+        with closing(sqlite3.connect(path)) as db, db:
             db.execute("CREATE TABLE unrelated (id INTEGER)")
     else:
         await SqliteRuntimeDatabase.create(path)
-        with sqlite3.connect(path) as db:
+        with closing(sqlite3.connect(path)) as db, db:
             if kind == "version":
                 db.execute("PRAGMA user_version = 99")
             elif kind == "identity":
@@ -104,11 +105,11 @@ async def test_open_handle_rejects_replaced_or_missing_database(tmp_path):
 async def test_schema_version_change_after_open_prevents_writes(tmp_path):
     path = tmp_path / "system.db"
     database = await SqliteRuntimeDatabase.create(path)
-    with sqlite3.connect(path) as db:
+    with closing(sqlite3.connect(path)) as db, db:
         db.execute("PRAGMA user_version = 99")
     with pytest.raises(StorageUnavailable):
         await database.connections.register(connection())
-    with sqlite3.connect(path) as db:
+    with closing(sqlite3.connect(path)) as db:
         assert db.execute("PRAGMA user_version").fetchone()[0] == 99
         assert db.execute("SELECT count(*) FROM model_connections").fetchone()[0] == 0
 
@@ -249,7 +250,7 @@ async def test_locked_database_is_error_not_memory_fallback(tmp_path, monkeypatc
     def short_timeout(*args, **kwargs):
         return connect(*args, **{**kwargs, "timeout": 0.01})
 
-    with connect(path) as locked:
+    with closing(connect(path)) as locked:
         locked.execute("BEGIN EXCLUSIVE")
         monkeypatch.setattr(sqlite_runtime.sqlite3, "connect", short_timeout)
         with pytest.raises(StorageUnavailable):
@@ -297,7 +298,7 @@ async def test_cancel_waits_for_transaction_to_settle_without_blocking_loop(
         with pytest.raises(asyncio.CancelledError):
             await task
     monkeypatch.setattr(sqlite_runtime.sqlite3, "connect", connect)
-    with connect(path) as db:
+    with closing(connect(path)) as db:
         assert db.execute("SELECT count(*) FROM input_receipts").fetchone()[0] == (0 if fail else 1)
 
 
@@ -321,7 +322,7 @@ async def test_room_service_uses_durable_runtime_without_putting_body_in_interna
     )
     assert await resumed.respond(incoming) == turn
     executor.generate.assert_awaited_once()
-    with sqlite3.connect(path) as db:
+    with closing(sqlite3.connect(path)) as db:
         dump = "\n".join(db.iterdump())
     assert "external-user" in dump and "key-reference" in dump
     assert "private input body" not in dump
